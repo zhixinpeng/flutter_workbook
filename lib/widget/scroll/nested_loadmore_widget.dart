@@ -6,10 +6,10 @@ import 'package:flutter_workbook/widget/scroll/loadmore_controller.dart';
 
 class NestedLoadmoreWidget extends StatefulWidget {
   /// 下拉刷新回调
-  final RefreshCallback onRefresh;
+  final RefreshCallback? onRefresh;
 
   /// 加载更多回调
-  final RefreshCallback onLoadMore;
+  final RefreshCallback? onLoadMore;
 
   /// 列表项渲染
   final IndexedWidgetBuilder itemBuilder;
@@ -23,6 +23,7 @@ class NestedLoadmoreWidget extends StatefulWidget {
   /// 滚动控制器
   final ScrollController? scrollController;
 
+  /// 刷新 Key
   final Key? refreshKey;
 
   const NestedLoadmoreWidget({
@@ -32,8 +33,8 @@ class NestedLoadmoreWidget extends StatefulWidget {
     required this.onLoadMore,
     required this.headerSliversBuilder,
     Key? key,
-    this.refreshKey,
     this.scrollController,
+    this.refreshKey,
   }) : super(key: key);
 
   @override
@@ -41,41 +42,26 @@ class NestedLoadmoreWidget extends StatefulWidget {
 }
 
 class _PullRefreshLoadWidgetState extends State<NestedLoadmoreWidget> {
-  /// 根据配置状态返回实际列表数量
-  int _getListCount() {
-    bool needRefresh = widget.controller.needRefresh;
-    int length = widget.controller.dataList.length;
-
-    if (needRefresh) {
-      return length > 0 ? length + 2 : length + 1;
-    } else {
-      if (length == 0) return 1;
-      return length > 0 ? length + 1 : length;
-    }
-  }
-
   /// 渲染列表项
   Widget _renderItem(int index) {
-    bool needRefresh = widget.controller.needRefresh;
     List<dynamic> data = widget.controller.dataList;
 
-    if (!needRefresh && index == data.length && data.length != 0) {
-      // 如果不需要头部，并且有数据，当 index 等于数据长度时，渲染加载更多 Item
-      return _buildProgressIndicator();
-    } else if (widget.controller.needRefresh &&
-        index == _getListCount() - 1 &&
-        widget.controller.dataList.length != 0) {
-      return _buildProgressIndicator();
-    } else if (!widget.controller.needRefresh && widget.controller.dataList.length == 0) {
-      // 如果不需要头部，并且无数据，渲染空页面
-      return _buildEmpty();
+    // 数据还未加载，显示加载更多
+    if (!widget.controller.isLoaded) return Container();
+
+    // 数据为空，显示空页面
+    if (data.length == 0) return _renderEmpty();
+
+    // 列表长度为数据长度 + 一个加载更多占位
+    if (index == data.length) {
+      return _renderLoadMoreIndicator();
     } else {
       return widget.itemBuilder(context, index);
     }
   }
 
-  /// 上拉加载更多
-  Widget _buildProgressIndicator() {
+  /// 渲染加载更多指示器
+  Widget _renderLoadMoreIndicator() {
     return Padding(
       padding: EdgeInsets.all(20),
       child: Center(
@@ -104,8 +90,8 @@ class _PullRefreshLoadWidgetState extends State<NestedLoadmoreWidget> {
     );
   }
 
-  /// 空页面
-  Widget _buildEmpty() {
+  /// 渲染空页面
+  Widget _renderEmpty() {
     return Container(
       height: MediaQuery.of(context).size.height - 100,
       child: Column(
@@ -130,20 +116,63 @@ class _PullRefreshLoadWidgetState extends State<NestedLoadmoreWidget> {
     );
   }
 
+  /// 锁定状态等待数据加载完成
+  _lockToAwait() async {
+    await Future.delayed(const Duration(seconds: 1)).then((_) async {
+      if (!widget.controller.isLoading) return;
+      return await _lockToAwait();
+    });
+  }
+
+  /// 刷新
+  Future<Null> handleRefresh() async {
+    print('nested handleRefresh');
+    if (widget.controller.isLoading) {
+      await _lockToAwait();
+    }
+
+    widget.controller.isLoading = true;
+    await widget.onRefresh?.call();
+    widget.controller.isLoading = false;
+    widget.controller.isLoaded = true;
+  }
+
+  /// 加载更多
+  Future<Null> handleLoadMore() async {
+    print('nested handleLoadMore');
+    if (widget.controller.isLoading) {
+      await _lockToAwait();
+    }
+
+    widget.controller.isLoading = true;
+    await widget.onLoadMore?.call();
+    widget.controller.isLoading = false;
+  }
+
+  @override
+  void initState() {
+    /// 监听 controller 数据的变化并刷新页面
+    widget.controller.addListener(() {
+      setState(() {});
+    });
+
+    super.initState();
+  }
+
   @override
   Widget build(BuildContext context) {
     return RefreshIndicator(
       key: widget.refreshKey,
-      onRefresh: widget.onRefresh,
+      onRefresh: handleRefresh,
       child: NestedScrollView(
         controller: widget.scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
         headerSliverBuilder: widget.headerSliversBuilder,
         body: NotificationListener(
           onNotification: (ScrollNotification notification) {
-            if (notification.metrics.pixels >= notification.metrics.maxScrollExtent) {
-              if (widget.controller.needLoadMore) {
-                widget.onLoadMore.call();
+            if (notification.runtimeType.toString() == 'ScrollEndNotification') {
+              if (widget.controller.isLoaded && widget.controller.needLoadMore) {
+                handleLoadMore();
               }
             }
             return false;
@@ -152,7 +181,7 @@ class _PullRefreshLoadWidgetState extends State<NestedLoadmoreWidget> {
             itemBuilder: (_, index) {
               return _renderItem(index);
             },
-            itemCount: _getListCount(),
+            itemCount: widget.controller.dataList.length + 1,
           ),
         ),
       ),

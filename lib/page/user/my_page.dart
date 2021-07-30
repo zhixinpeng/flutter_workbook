@@ -38,7 +38,7 @@ class MyPageState extends BasePersonState<MyPage> {
     return _getStore()?.state.userInfo?.type;
   }
 
-  /// 获取数据
+  /// 获取列表数据
   _getDataLogic() async {
     if (_getUserName() == null) return [];
     if (_getUserType() == 'Organization') {
@@ -48,17 +48,9 @@ class MyPageState extends BasePersonState<MyPage> {
     }
   }
 
-  @override
-  bool get isRefreshFirst => false;
-
-  @override
-  bool get needRefresh => false;
-
-  @override
-  bool get wantKeepAlive => true;
-
-  @override
-  requestRefresh() async {
+  /// 请求下拉刷新
+  Future<void> _requestRefresh() async {
+    // 刷新头部相关展示信息
     if (_getUserName() != null) {
       // 通过 redux middleware 提交更新用户数据行为，触发网络更新请求
       _getStore()?.dispatch(FetchUserAction());
@@ -72,25 +64,25 @@ class MyPageState extends BasePersonState<MyPage> {
       _refreshNotify();
     }
 
-    return await _getDataLogic();
+    // 刷新列表展示信息
+    pageReset();
+    var res = await _getDataLogic();
+    controller.needLoadMore = checkNeedLoadMore(res);
+    controller.dataList = res.data;
   }
 
-  @override
-  requestLoadMore() async {
-    return await _getDataLogic();
-  }
-
-  @override
-  void initState() {
-    controller.needRefresh = true;
-    super.initState();
+  /// 请求上拉加载
+  Future<void> _requestLoadMore() async {
+    pageIncrease();
+    var res = await _getDataLogic();
+    controller.needLoadMore = checkNeedLoadMore(res);
+    controller.addList(res.data);
   }
 
   @override
   void didChangeDependencies() {
-    if (controller.dataList.length == 0) {
-      showRefreshLoading();
-    }
+    /// 首次进入页面时请求刷新
+    if (dataList.length == 0) showRefreshLoading();
     super.didChangeDependencies();
   }
 
@@ -103,9 +95,10 @@ class MyPageState extends BasePersonState<MyPage> {
       builder: (context, store) {
         return NestedLoadmoreWidget(
           controller: controller,
-          onRefresh: onRefresh,
-          onLoadMore: onLoadMore,
-          refreshKey: nestedRefreshIndicatorKey,
+          scrollController: scrollController,
+          refreshKey: refreshIndicatorKey,
+          onRefresh: _requestRefresh,
+          onLoadMore: _requestLoadMore,
           itemBuilder: (BuildContext context, int index) => renderItem(
             index: index,
             userInfo: store.state.userInfo!,

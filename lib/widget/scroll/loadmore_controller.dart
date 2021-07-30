@@ -8,9 +8,6 @@ class LoadmoreController extends ChangeNotifier {
   /// 是否需要加载更多
   bool _needLoadMore = true;
 
-  /// 是否需要刷新
-  bool _needRefresh = false;
-
   /// 是否处于加载中
   bool isLoading = false;
 
@@ -43,15 +40,6 @@ class LoadmoreController extends ChangeNotifier {
   /// 设置是否需要加载更多
   set needLoadMore(bool value) {
     _needLoadMore = value;
-    notifyListeners();
-  }
-
-  /// 获取是否需要刷新
-  bool get needRefresh => _needRefresh;
-
-  /// 设置是否需要刷新
-  set needRefresh(bool value) {
-    _needRefresh = value;
     notifyListeners();
   }
 }

@@ -29,9 +29,6 @@ class LoadmoreWidget extends StatefulWidget {
   /// 是否使用 IOS 模式
   final bool useIOS;
 
-  /// 刷新 KEY
-  final Key? refreshKey;
-
   const LoadmoreWidget({
     Key? key,
     required this.itemBuilder,
@@ -40,7 +37,6 @@ class LoadmoreWidget extends StatefulWidget {
     this.onLoadMore,
     this.scrollController,
     this.useIOS: false,
-    this.refreshKey,
   }) : super(key: key);
 
   @override
@@ -50,24 +46,7 @@ class LoadmoreWidget extends StatefulWidget {
 class _LoadmoreWidgetState extends State<LoadmoreWidget> {
   ScrollController? _scrollController;
 
-  bool _isRefreshing = false;
-
-  bool _isLoadingMore = false;
-
-  /// 根据配置状态返回实际列表元素数量
-  int _getListCount() {
-    bool needRefresh = widget.controller.needRefresh;
-    int length = widget.controller.dataList.length;
-
-    if (needRefresh) {
-      return length > 0 ? length + 2 : length + 1;
-    } else {
-      if (length == 0) return 1;
-      return length > 0 ? length + 1 : length;
-    }
-  }
-
-  /// 渲染加载更多提示
+  /// 渲染加载更多指示器
   Widget _renderLoadMoreIndicator() {
     return Padding(
       padding: EdgeInsets.all(20),
@@ -121,34 +100,23 @@ class _LoadmoreWidgetState extends State<LoadmoreWidget> {
 
   /// 渲染列表项
   Widget _renderItem(int index) {
-    bool needRefresh = widget.controller.needRefresh;
     List<dynamic> data = widget.controller.dataList;
 
-    // 不需要刷新且 index 等于数据长度、需要头部且 index 等于实际渲染长度 - 1时，需要显示加载更多
-    bool showIndicator = (!needRefresh && index == data.length) || (needRefresh && index == _getListCount() - 1);
-
     // 数据还未加载，显示加载更多
-    if (!widget.controller.isLoaded) {
-      return Container(
-        alignment: Alignment.center,
-        height: MediaQuery.of(context).size.height - 100,
-        child: _renderLoadMoreIndicator(),
-      );
-    }
+    if (!widget.controller.isLoaded) return Container();
 
-    // 数据已加载，根据配置和数据显示对应内容
-    if (showIndicator && data.length != 0) {
-      // 数据不为空时显示加载更多提示
+    // 数据为空，显示空页面
+    if (data.length == 0) return _renderEmpty();
+
+    // 列表长度为数据长度 + 一个加载更多占位
+    if (index == data.length) {
       return _renderLoadMoreIndicator();
-    } else if (!needRefresh && data.length == 0) {
-      // 不需要头部且数据为空时，显示空页面
-      return _renderEmpty();
     } else {
-      // 其他情况正常显示列表元素
       return widget.itemBuilder(context, index);
     }
   }
 
+  /// 渲染下拉刷新指示器
   Widget _renderRefreshIndicator(
     BuildContext context,
     Cupertino.RefreshIndicatorMode refreshState,
@@ -172,6 +140,7 @@ class _LoadmoreWidgetState extends State<LoadmoreWidget> {
     );
   }
 
+  /// 锁定状态等待数据加载完成
   _lockToAwait() async {
     await Future.delayed(const Duration(seconds: 1)).then((_) async {
       if (!widget.controller.isLoading) return;
@@ -179,34 +148,28 @@ class _LoadmoreWidgetState extends State<LoadmoreWidget> {
     });
   }
 
-  @protected
+  /// 刷新
   Future<Null> handleRefresh() async {
     print('handleRefresh');
     if (widget.controller.isLoading) {
-      if (_isRefreshing) return null;
       await _lockToAwait();
     }
 
     widget.controller.isLoading = true;
-    _isRefreshing = true;
     await widget.onRefresh?.call();
-    _isRefreshing = false;
     widget.controller.isLoading = false;
     widget.controller.isLoaded = true;
   }
 
-  @protected
+  /// 加载更多
   Future<Null> handleLoadMore() async {
     print('handleLoadMore');
     if (widget.controller.isLoading) {
-      if (_isLoadingMore) return;
       await _lockToAwait();
     }
 
     widget.controller.isLoading = true;
-    _isLoadingMore = true;
     await widget.onLoadMore?.call();
-    _isLoadingMore = false;
     widget.controller.isLoading = false;
   }
 
@@ -222,7 +185,7 @@ class _LoadmoreWidgetState extends State<LoadmoreWidget> {
     /// 监听 scrollController 的滚动状态触发加载更多
     _scrollController!.addListener(() {
       if (_scrollController!.position.pixels == _scrollController!.position.maxScrollExtent) {
-        if (widget.controller.needLoadMore) {
+        if (widget.controller.isLoaded && widget.controller.needLoadMore) {
           handleLoadMore();
         }
       }
@@ -253,7 +216,7 @@ class _LoadmoreWidgetState extends State<LoadmoreWidget> {
                 (context, index) {
                   return _renderItem(index);
                 },
-                childCount: _getListCount(),
+                childCount: widget.controller.dataList.length + 1,
               ),
             ),
           ],
@@ -263,8 +226,6 @@ class _LoadmoreWidgetState extends State<LoadmoreWidget> {
 
     // 启用 Android 模式下的下拉刷新
     return RefreshIndicator(
-      // GlobalKey 用于外部获取 RefreshIndicator 的 State，做显示刷新
-      key: widget.refreshKey,
       onRefresh: handleRefresh,
       child: ListView.builder(
         // 保证 ListView 任何情况都能滚动，解决在 RefreshIndicator 的兼容问题
@@ -272,7 +233,7 @@ class _LoadmoreWidgetState extends State<LoadmoreWidget> {
         itemBuilder: (context, index) {
           return _renderItem(index);
         },
-        itemCount: _getListCount(),
+        itemCount: widget.controller.dataList.length + 1,
         controller: _scrollController,
       ),
     );

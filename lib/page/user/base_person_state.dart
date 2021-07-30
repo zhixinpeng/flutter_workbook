@@ -1,27 +1,67 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter_workbook/common/api/result_data.dart';
 import 'package:flutter_workbook/common/api/user_api.dart';
+import 'package:flutter_workbook/common/config/config.dart';
 import 'package:flutter_workbook/model/Event.dart';
 import 'package:flutter_workbook/model/UserOrg.dart';
 import 'package:flutter_workbook/model/User.dart';
 import 'package:flutter_workbook/page/user/user_header.dart';
 import 'package:flutter_workbook/page/user/user_item.dart';
 import 'package:flutter_workbook/widget/event_item_widget.dart';
-import 'package:flutter_workbook/widget/scroll/list_state_mixin.dart';
-import 'package:flutter_workbook/widget/scroll/nested_refresh.dart';
+import 'package:flutter_workbook/widget/scroll/loadmore_controller.dart';
 import 'package:flutter_workbook/widget/scroll/sliver_header_delegate.dart';
 import 'package:provider/provider.dart';
 
 abstract class BasePersonState<T extends StatefulWidget> extends State<T>
-    with AutomaticKeepAliveClientMixin<T>, ListStateMixin<T>, SingleTickerProviderStateMixin {
-  final GlobalKey<NestedScrollViewRefreshIndicatorState> nestedRefreshIndicatorKey =
-      GlobalKey<NestedScrollViewRefreshIndicatorState>();
+    with AutomaticKeepAliveClientMixin<T>, SingleTickerProviderStateMixin {
+  /// 列表请求页码
+  int page = 1;
 
+  /// 控制刷新、加载列表
+  final LoadmoreController controller = LoadmoreController();
+
+  /// 控制列表滚动和监听
+  final ScrollController scrollController = ScrollController();
+
+  /// 获取列表数据
+  List<dynamic> get dataList => controller.dataList;
+
+  /// 获取列表数据长度
+  int get dataLength => dataList.length;
+
+  /// 重置页码
+  pageReset() => page = 1;
+
+  /// 增加页码
+  pageIncrease() => page++;
+
+  /// 判断是否需要加载更多
+  checkNeedLoadMore(ResultData? res) {
+    return res != null && res.data != null && res.data.length % Config.PAGE_SIZE == 0;
+  }
+
+  /// 用于控制列表刷新
+  GlobalKey<RefreshIndicatorState> refreshIndicatorKey = GlobalKey<RefreshIndicatorState>();
+
+  /// 用户组织列表
   final List<UserOrg> organizationList = [];
 
   final HonorModel honorModel = HonorModel();
 
-  @protected
+  /// 页面是否开启缓存
+  @override
+  bool get wantKeepAlive => true;
+
+  /// 自动下拉刷新页面
+  showRefreshLoading() {
+    Future.delayed(const Duration(milliseconds: 200), () {
+      refreshIndicatorKey.currentState!.show();
+      return true;
+    });
+  }
+
+  /// 获取用户组织信息
   getUserOrganization(String? username) async {
     if (page > 1 || username == null) return;
     var res = await UserApi.getUserOrganization(username, page);
@@ -33,22 +73,9 @@ abstract class BasePersonState<T extends StatefulWidget> extends State<T>
     }
   }
 
-  @protected
   getUserStarred(String? username) {}
 
-  @override
-  bool get wantKeepAlive => true;
-
-  @override
-  showRefreshLoading() {
-    Future.delayed(const Duration(seconds: 0), () {
-      nestedRefreshIndicatorKey.currentState?.show().then((e) {});
-    });
-    return super.showRefreshLoading();
-  }
-
-  @protected
-  renderItem({
+  Widget renderItem({
     required int index,
     required User userInfo,
     required String starred,
@@ -67,7 +94,6 @@ abstract class BasePersonState<T extends StatefulWidget> extends State<T>
     }
   }
 
-  @protected
   List<Widget> sliverBuilder({
     BuildContext? context,
     required User userInfo,

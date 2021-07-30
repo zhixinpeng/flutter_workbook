@@ -123,7 +123,6 @@ class UserHeader extends StatelessWidget {
   }
 
   Widget _renderOrgs(BuildContext context, List<UserOrg>? orgList) {
-    print(orgList);
     if (orgList == null || orgList.length == 0) return Container();
 
     List<Widget> list = [];
@@ -271,7 +270,6 @@ class UserHeaderBottom extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    print(userInfo.starred);
     return CardItemWidget(
       color: Theme.of(context).primaryColor,
       margin: EdgeInsets.all(0),
